@@ -17,7 +17,7 @@ func main() {
 	// 1. Récupération de la clé API
 	apiKey := os.Getenv("GEMINI_API_KEY")
 	if apiKey == "" {
-		log.Fatal("Erreur : La variable d'environnement GEMINI_API_KEY n'est pas définie.")
+		log.Fatal("Error : env var GEMINI_API_KEY is not set")
 	}
 
 	// 2. Initialisation du client Gemini
@@ -30,7 +30,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	fmt.Println("--- Modèles disponibles ---")
+	fmt.Println("--- Available Models ---")
 	models, err := client.Models.List(ctx, &genai.ListModelsConfig{})
 	if err != nil {
 		log.Fatal(err)
@@ -50,7 +50,7 @@ func main() {
 	imagePath := "visage.jpg" // Assurez-vous que ce fichier existe
 	imgData, err := os.ReadFile(imagePath)
 	if err != nil {
-		log.Fatalf("Impossible de lire l'image : %v", err)
+		log.Fatalf("Image unavailable : %v", err)
 	}
 
 	// Détermination du format de l'image (jpeg, png, etc.)
@@ -60,11 +60,10 @@ func main() {
 		format = "jpeg"
 	}
 
-	fmt.Printf("🔍 Analyse de l'image en cours avec %s...\n", modelName)
+	fmt.Printf("🔍 Image analysis with %s...\n", modelName)
 
 	// 5. Création du Prompt Multimodal (Texte + Image)
-	promptText := `Act like a physiognomy expert and analyze this photo of a human face.
-Provide a structured response including the following points:
+	promptText := `Provide a structured response including the following points:
 - **Apparent Emotion:** What mood is being expressed?
 - **Demographic Estimate:** Approximate age and apparent gender.
 - **Physical Characteristics:**
@@ -73,9 +72,7 @@ Provide a structured response including the following points:
     - Beard/mustache
 - **Accessories:**
     - Glasses?
-    - Piercings?
-
-Answer concisely.`
+    - Piercings?`
 
 	parts := []*genai.Part{
 		{Text: promptText},
@@ -83,16 +80,22 @@ Answer concisely.`
 	}
 
 	// 6. Envoi de la requête et affichage de la réponse
+	// On ajoute une instruction système pour cadrer la réponse
 	// On baisse la "temperature" pour avoir une réponse plus factuelle et moins créative
-	config := &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](0.4)}
+	// On demande une réponse en JSON structuré pour faciliter le parsing
+	config := &genai.GenerateContentConfig{
+		SystemInstruction: &genai.Content{Parts: []*genai.Part{{Text: "Act like a physiognomy expert analyzing human faces from images. Answer concisely."}}},
+		Temperature:       genai.Ptr[float32](0.4),
+		ResponseMIMEType:  "application/json",
+	}
 	start := time.Now()
 	resp, err := client.Models.GenerateContent(ctx, modelName, []*genai.Content{{Parts: parts}}, config)
 	elapsed := time.Since(start)
 	if err != nil {
-		log.Fatalf("Erreur pendant l'appel GenerateContent (après %s): %v", elapsed, err)
+		log.Fatalf("Error during GenerateContent (after %s): %v", elapsed, err)
 	}
 
-	fmt.Printf("Temps d'analyse : %s\n", elapsed)
+	fmt.Printf("Analyse time : %s\n", elapsed)
 
 	printResponse(resp)
 }
@@ -102,7 +105,7 @@ func printResponse(resp *genai.GenerateContentResponse) {
 	for _, cand := range resp.Candidates {
 		if cand.Content != nil {
 			for _, part := range cand.Content.Parts {
-				fmt.Println("\n--- Résultat de l'analyse ---")
+				fmt.Println("\n--- Analyse result ---")
 				fmt.Println(part.Text)
 				fmt.Println("-----------------------------")
 			}
