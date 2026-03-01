@@ -83,10 +83,20 @@
 
     # Create a cluster-nodes-pool (ARM 4vCPU 8Go )
     scw k8s pool create cluster-id=$cluster-id name=cluster-pool node-type=BASIC2-A4C-8G size=1
-
+    # scw k8s pool list cluster-id=$cluster-id
+    # scw k8s pool delete cluster-id=$cluster-id
+    
     # Add minio repository 
     helm repo add minio https://helm.min.io/
-    
+    helm repo list
+
+
     # https://docs.min.io/enterprise/aistor-object-store/installation/kubernetes/install/deploy-aistor-on-kubernetes/
+    # licence in ~/minio/minio.licence
+    # optional: customize [helm chart](https://docs.min.io/enterprise/aistor-object-store/reference/kubernetes/object-store-operator-helm-chart/)
+
+    # install aistor
+    helm install aistor minio/aistor-operator -n aistor --create-namespace --set license="$(cat ~/minio/minio.license)" # -f custom-aistor.yaml
+    # helm uninstall aistor -n aistor
 
     ```

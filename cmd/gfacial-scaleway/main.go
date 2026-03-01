@@ -4,8 +4,11 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/invopop/jsonschema"
@@ -53,18 +56,17 @@ func GenerateSchema[T any]() interface{} {
 // Generate the JSON schema at initialization time
 var FacialAppearanceRespSchema = GenerateSchema[FacialAppearance]()
 
-func main() {
-	// 1. Récupération de la clé API
-	apiKey := os.Getenv("SCW_SECRET_KEY")
-	if apiKey == "" {
-		log.Fatal("Error : env var SCW_SECRET_KEY is not set")
-	}
+// Constants
+const (
+	uploadDir     = "./uploads"
+	maxUploadSize = 5 * 1024 * 1024 // 10MB
+)
 
-	// 2. Chargement de l'image
-	imagePath := "visage.jpg"
+// analyzeFaceImage analyzes a face image using Scaleway API
+func analyzeFaceImage(ctx context.Context, client *openai.Client, imagePath string) (string, error) {
 	imageData, err := os.ReadFile(imagePath)
 	if err != nil {
-		log.Fatalf("Image unavailable : %v", err)
+		return "", fmt.Errorf("failed to read image: %w", err)
 	}
 
 	// Encoder l'image en base64
@@ -91,23 +93,12 @@ func main() {
 		imgPart,
 	}
 
-	// 3. Création du client OpenAI
-	client := openai.NewClient(
-		option.WithBaseURL("https://api.scaleway.ai/314acaf2-5b9b-4c8d-94bf-67a059237bb2/v1"),
-		option.WithAPIKey(apiKey),
-	)
-
-	ctx := context.Background()
-	start := time.Now()
-
 	resp, err := client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
 		Model:       "pixtral-12b-2409",
 		Temperature: openai.Float(0.1),
 		Messages: []openai.ChatCompletionMessageParamUnion{
 			openai.UserMessage(unionParts),
 		},
-		// https://opensource.googleblog.com/2026/01/a-json-schema-package-for-go.html
-
 		ResponseFormat: openai.ChatCompletionNewParamsResponseFormatUnion{
 			OfJSONSchema: &openai.ResponseFormatJSONSchemaParam{
 				JSONSchema: openai.ResponseFormatJSONSchemaJSONSchemaParam{
@@ -118,12 +109,109 @@ func main() {
 		},
 	})
 
-	elapsed := time.Since(start)
-
 	if err != nil {
-		log.Fatalf("Error during client.Chat.Completions (after %s): %v", elapsed, err)
+		return "", fmt.Errorf("failed to analyze image: %w", err)
 	}
 
-	fmt.Printf("Elapsed time: %.3f s\n", elapsed.Seconds())
-	println(resp.Choices[0].Message.Content)
+	return resp.Choices[0].Message.Content, nil
+}
+
+// handleUploadFace handles POST requests to /upload-face
+func handleUploadFace(client *openai.Client) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+
+		// add basic CORS headers so that file:// pages can talk to us
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		if r.Method == http.MethodOptions {
+			// preflight; just return
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		// Parse the form data
+		if err := r.ParseMultipartForm(maxUploadSize); err != nil {
+			http.Error(w, fmt.Sprintf("Failed to parse form: %v", err), http.StatusBadRequest)
+			return
+		}
+
+		// Retrieve the file from the form
+		file, handler, err := r.FormFile("file")
+		if err != nil {
+			http.Error(w, "File not found in form", http.StatusBadRequest)
+			return
+		}
+		defer file.Close()
+
+		// Validate file is JPG
+		if handler.Header.Get("Content-Type") != "image/jpeg" {
+			http.Error(w, "Only JPEG files are allowed", http.StatusBadRequest)
+			return
+		}
+
+		// Create upload directory if it doesn't exist
+		if err := os.MkdirAll(uploadDir, 0755); err != nil {
+			http.Error(w, fmt.Sprintf("Failed to create upload directory: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		// Save file to disk
+		filename := filepath.Join(uploadDir, handler.Filename)
+		dst, err := os.Create(filename)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Failed to create file: %v", err), http.StatusInternalServerError)
+			return
+		}
+		defer dst.Close()
+
+		if _, err := io.Copy(dst, file); err != nil {
+			http.Error(w, fmt.Sprintf("Failed to save file: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		// Analyze the face image
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		start := time.Now()
+		result, err := analyzeFaceImage(ctx, client, filename)
+		elapsed := time.Since(start)
+
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Failed to analyze image: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"filename":"%s","analysis_time":"%.3fs","result":%s}`, handler.Filename, elapsed.Seconds(), result)
+	}
+}
+
+func main() {
+	// 1. Récupération de la clé API
+	apiKey := os.Getenv("SCW_SECRET_KEY")
+	if apiKey == "" {
+		log.Fatal("Error : env var SCW_SECRET_KEY is not set")
+	}
+
+	// 2. Création du client OpenAI
+	client := openai.NewClient(
+		option.WithBaseURL("https://api.scaleway.ai/314acaf2-5b9b-4c8d-94bf-67a059237bb2/v1"),
+		option.WithAPIKey(apiKey),
+	)
+
+	// 3. Configure HTTP handlers
+	http.HandleFunc("/upload-face", handleUploadFace(&client))
+
+	// Start server
+	port := ":8080"
+	log.Printf("Server starting on http://localhost%s", port)
+	if err := http.ListenAndServe(port, nil); err != nil {
+		log.Fatalf("Server error: %v", err)
+	}
 }

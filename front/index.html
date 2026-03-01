@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Upload Face Image</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 2rem;
+        }
+        .container {
+            max-width: 400px;
+            margin: auto;
+            padding: 1rem;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+        }
+        input[type=file] {
+            display: block;
+            margin-bottom: 1rem;
+        }
+        button {
+            padding: 0.5rem 1rem;
+            font-size: 1rem;
+        }
+        #response {
+            margin-top: 1rem;
+            white-space: pre-wrap;
+            background: #f8f8f8;
+            padding: 0.5rem;
+            border: 1px solid #ddd;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h2>Upload Face Image</h2>
+    <form id="uploadForm" method="post" enctype="multipart/form-data">
+        <input type="file" name="file" accept="image/jpeg" required>
+        <button type="submit">Send</button>
+    </form>
+    <div id="response"></div>
+    <style>
+        .json-key { color: brown; }
+        .json-string { color: olive; }
+        .json-number { color: teal; }
+        .json-boolean { color: purple; }
+        .json-null { color: gray; }
+    </style>
+</div>
+
+<script>
+    const form = document.getElementById('uploadForm');
+    const respDiv = document.getElementById('response');
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const data = new FormData(form);
+        try {
+            const res = await fetch('http://localhost:8080/upload-face', {
+                method: 'POST',
+                body: data
+            });
+            const text = await res.text();
+            // try parsing JSON to pretty-print
+            let body = text;
+            try {
+                const obj = JSON.parse(text);
+                body = syntaxHighlight(JSON.stringify(obj, null, 2));
+            } catch {}
+            respDiv.innerHTML = `<strong>Status:</strong> ${res.status}\n<pre>${body}</pre>`;
+        } catch (err) {
+            respDiv.textContent = 'Error: ' + err;
+        }
+    });
+
+    // simple syntax highlighter for JSON
+    function syntaxHighlight(json) {
+        json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+            let cls = 'json-number';
+            if (/^"/.test(match)) {
+                if (/:$/.test(match)) {
+                    cls = 'json-key';
+                } else {
+                    cls = 'json-string';
+                }
+            } else if (/true|false/.test(match)) {
+                cls = 'json-boolean';
+            } else if (/null/.test(match)) {
+                cls = 'json-null';
+            }
+            return '<span class="' + cls + '">' + match + '</span>';
+        });
+    }
+</script>
+</body>
+</html>
