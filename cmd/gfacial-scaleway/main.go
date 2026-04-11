@@ -58,7 +58,7 @@ var FacialAppearanceRespSchema = GenerateSchema[FacialAppearance]()
 
 // Constants
 const (
-	uploadDir     = "./uploads"
+	uploadDir     = "/tmp"
 	maxUploadSize = 5 * 1024 * 1024 // 10MB
 )
 
@@ -116,19 +116,20 @@ func analyzeFaceImage(ctx context.Context, client *openai.Client, imagePath stri
 	return resp.Choices[0].Message.Content, nil
 }
 
+// securityHeaders wraps a handler and adds HTTP security headers
+func securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'")
+		next.ServeHTTP(w, r)
+	})
+}
+
 // handleUploadFace handles POST requests to /upload-face
 func handleUploadFace(client *openai.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-
-		// add basic CORS headers so that file:// pages can talk to us
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-		if r.Method == http.MethodOptions {
-			// preflight; just return
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
 		if r.Method != http.MethodPost {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -206,12 +207,14 @@ func main() {
 	)
 
 	// 3. Configure HTTP handlers
-	http.HandleFunc("/upload-face", handleUploadFace(&client))
+	mux := http.NewServeMux()
+	mux.Handle("/", http.FileServer(http.Dir("front")))
+	mux.HandleFunc("/upload-face", handleUploadFace(&client))
 
 	// Start server
 	port := ":8080"
 	log.Printf("Server starting on http://localhost%s", port)
-	if err := http.ListenAndServe(port, nil); err != nil {
+	if err := http.ListenAndServe(port, securityHeaders(mux)); err != nil {
 		log.Fatalf("Server error: %v", err)
 	}
 }

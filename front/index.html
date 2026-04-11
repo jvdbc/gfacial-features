@@ -56,7 +56,7 @@
         e.preventDefault();
         const data = new FormData(form);
         try {
-            const res = await fetch('http://localhost:8080/upload-face', {
+            const res = await fetch('/upload-face', {
                 method: 'POST',
                 body: data
             });

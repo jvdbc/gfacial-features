@@ -15,8 +15,6 @@ clean: project-name
 
 install: clean 
 	install -d $(CURDIR)/build/macos_arm64 && install -d $(CURDIR)/build/linux_amd64
-	cp $(CURDIR)/resources/visage.jpg $(CURDIR)/build/macos_arm64
-	cp $(CURDIR)/resources/visage.jpg $(CURDIR)/build/linux_amd64
 
 build: install
 	@echo off && go version
