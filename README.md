@@ -1,6 +1,8 @@
 # Project: gfacial-features
 
+
 ## Project purpose
+
 - Golang project to analyze a photo of a human face using github.com/googleapis/go-genai
     - obtain the facial features in the image:
         * Eye color
@@ -11,12 +13,15 @@
         * Accessories: glasses, piercings
 
 ## General Instructions
+
 <!-- - shell client using github.com/urfave/cli/v2 -->
 
 ## Coding Style
-- Use golang idiomatic coding style
+
+* Use golang idiomatic coding style
 
 # Project: gfacial-scaleway
+
 
 ## Project purpose
 
@@ -29,6 +34,7 @@
         * AIStore (new minio server and client) on scaleway kubernetes
 
 ## Requirements (k8s)
+
 * Install [kubectl](https://kubernetes.io/fr/docs/tasks/tools/install-kubectl/)
 
 * Install [helm](https://helm.sh/fr/docs/intro/install/)
@@ -50,17 +56,20 @@
     ```
     
     * Export your scaleway object config into mc config file
+
     ```bash
     # Generate mc config file for your scaleway object storage account
     scw object config install region=fr-par type=mc
     ```
     
     * Create your bucket
+
     ```bash
     scw object bucket create mon-bucket
     ```
     
     * [Create](https://www.scaleway.com/en/docs/object-storage/api-cli/installing-minio-client/) mc alias for your new bucket
+
     ```bash
     # mc alias set <ALIAS> <YOUR-S3-ENDPOINT> --api <API-SIGNATURE>
     mc alias set s3-scw https://s3.fr-par.scw.cloud --api S3v4
