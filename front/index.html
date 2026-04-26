@@ -23,12 +23,33 @@
             padding: 0.5rem 1rem;
             font-size: 1rem;
         }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
         #response {
             margin-top: 1rem;
             white-space: pre-wrap;
             background: #f8f8f8;
             padding: 0.5rem;
             border: 1px solid #ddd;
+        }
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #ccc;
+            border-top-color: #333;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .loading-text {
+            vertical-align: middle;
         }
     </style>
 </head>
@@ -37,7 +58,7 @@
     <h2>Upload Face Image</h2>
     <form id="uploadForm" method="post" enctype="multipart/form-data">
         <input type="file" name="file" accept="image/jpeg" required>
-        <button type="submit">Send</button>
+        <button type="submit" disabled>Envoyer</button>
     </form>
     <div id="response"></div>
     <style>
@@ -52,8 +73,23 @@
 <script>
     const form = document.getElementById('uploadForm');
     const respDiv = document.getElementById('response');
+    const submitBtn = form.querySelector('button[type="submit"]');
+    const fileInput = form.querySelector('input[type="file"]');
+
+    fileInput.addEventListener('change', () => {
+        submitBtn.disabled = !fileInput.files.length;
+    });
+
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
+
+        submitBtn.disabled = true;
+        const spinner = document.createElement('span');
+        spinner.className = 'spinner';
+        submitBtn.innerHTML = '';
+        submitBtn.appendChild(spinner);
+        submitBtn.appendChild(document.createTextNode('Analyse en cours…'));
+
         const data = new FormData(form);
         try {
             const res = await fetch('/upload-face', {
@@ -61,7 +97,6 @@
                 body: data
             });
             const text = await res.text();
-            // try parsing JSON to pretty-print
             let body = text;
             try {
                 const obj = JSON.parse(text);
@@ -70,6 +105,9 @@
             respDiv.innerHTML = `<strong>Status:</strong> ${res.status}\n<pre>${body}</pre>`;
         } catch (err) {
             respDiv.textContent = 'Error: ' + err;
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Envoyer';
         }
     });
 
