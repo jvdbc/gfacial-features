@@ -1,4 +1,4 @@
-package main
+package api
 
 import (
 	"context"
@@ -11,28 +11,28 @@ import (
 )
 
 const (
-	baseURL      = "https://api.scaleway.ai/fb7f7471-4eb8-49a0-bb6b-d8f2655902fd/v1"
-	pixtralModel = "pixtral-12b-2409"
+	BaseURL      = "https://api.scaleway.ai/fb7f7471-4eb8-49a0-bb6b-d8f2655902fd/v1"
+	PixtralModel = "pixtral-12b-2409"
 )
 
-type OpenAIClient struct {
+type Client struct {
 	client openai.Client
 }
 
-func NewOpenAIClient(apiKey string) (*OpenAIClient, error) {
+func NewClient(apiKey string) (*Client, error) {
 	if apiKey == "" {
 		return nil, fmt.Errorf("API key is required")
 	}
 
 	client := openai.NewClient(
-		option.WithBaseURL(baseURL),
+		option.WithBaseURL(BaseURL),
 		option.WithAPIKey(apiKey),
 	)
 
-	return &OpenAIClient{client: client}, nil
+	return &Client{client: client}, nil
 }
 
-func (c *OpenAIClient) AnalyzeFace(ctx context.Context, imagePath string) (string, error) {
+func (c *Client) AnalyzeFace(ctx context.Context, imagePath string) (string, error) {
 	imageData, err := os.ReadFile(imagePath)
 	if err != nil {
 		return "", fmt.Errorf("failed to read image: %w", err)
@@ -62,7 +62,7 @@ func (c *OpenAIClient) AnalyzeFace(ctx context.Context, imagePath string) (strin
 	}
 
 	resp, err := c.client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
-		Model:       pixtralModel,
+		Model:       PixtralModel,
 		Temperature: openai.Float(0.1),
 		Messages: []openai.ChatCompletionMessageParamUnion{
 			openai.UserMessage(unionParts),

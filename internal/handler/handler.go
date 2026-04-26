@@ -1,4 +1,4 @@
-package main
+package handler
 
 import (
 	"context"
@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/jvdbc/gfacial-features/internal/api"
 )
 
 const (
@@ -17,7 +19,7 @@ const (
 	uploadTimeout = 30 * time.Second
 )
 
-func securityHeaders(next http.Handler) http.Handler {
+func SecurityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "DENY")
@@ -27,7 +29,7 @@ func securityHeaders(next http.Handler) http.Handler {
 	})
 }
 
-func handleUploadFace(client *OpenAIClient) http.HandlerFunc {
+func NewUploadFaceHandler(client *api.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
