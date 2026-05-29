@@ -3,6 +3,7 @@ package s3
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -14,10 +15,6 @@ import (
 	"regexp"
 	"strings"
 	"time"
-
-	awscredentials "github.com/aws/smithy-go/aws-http-auth/credentials"
-	awssigv4 "github.com/aws/smithy-go/aws-http-auth/sigv4"
-	awsv4 "github.com/aws/smithy-go/aws-http-auth/v4"
 )
 
 const (
@@ -31,7 +28,6 @@ type Client struct {
 	accessKey      string
 	secretKey      string
 	debugSignature bool
-	signer         *awssigv4.Signer
 }
 
 func NewClient(accessKey, secretKey string, debug bool) *Client {
@@ -41,11 +37,6 @@ func NewClient(accessKey, secretKey string, debug bool) *Client {
 		accessKey:      accessKey,
 		secretKey:      secretKey,
 		debugSignature: debug,
-		signer: awssigv4.New(func(o *awsv4.SignerOptions) {
-			o.DisableDoublePathEscape = true
-			o.AddPayloadHashHeader = true
-			o.DisableImplicitPayloadHashing = true
-		}),
 	}
 }
 
@@ -145,8 +136,8 @@ func (c *Client) buildDebugSignatureData(req *http.Request, payloadHash string, 
 	canonicalRequestHashHex := hex.EncodeToString(canonicalRequestHash[:])
 
 	algorithm := "AWS4-HMAC-SHA256"
-	credential := fmt.Sprintf("%s/%s/%s/s3/aws4_request", c.accessKey, dateStamp, Region)
-	stringToSign := fmt.Sprintf("%s\n%s\n%s\n%s", algorithm, date, credential, canonicalRequestHashHex)
+	credentialScope := fmt.Sprintf("%s/%s/s3/aws4_request", dateStamp, Region)
+	stringToSign := fmt.Sprintf("%s\n%s\n%s\n%s", algorithm, date, credentialScope, canonicalRequestHashHex)
 
 	return canonicalRequest, stringToSign
 }
@@ -209,19 +200,54 @@ func (c *Client) Delete(s3URL string) error {
 
 func (c *Client) signRequest(req *http.Request, payloadHash []byte, now time.Time) error {
 	req.Host = req.URL.Host
+	payloadHashHex := hex.EncodeToString(payloadHash)
+	amzDate := now.Format("20060102T150405Z")
+	dateStamp := now.Format("20060102")
 
-	return c.signer.SignRequest(&awssigv4.SignRequestInput{
-		Request:     req,
-		PayloadHash: payloadHash,
-		Credentials: awscredentials.Credentials{
-			AccessKeyID:     c.accessKey,
-			SecretAccessKey: c.secretKey,
-		},
-		Service:       "s3",
-		Region:        Region,
-		Time:          now,
-		SignatureType: awsv4.SignatureTypeHeader,
-	})
+	req.Header.Set("x-amz-date", amzDate)
+	req.Header.Set("x-amz-content-sha256", payloadHashHex)
+
+	host := req.Host
+	if host == "" {
+		host = req.URL.Host
+	}
+
+	canonicalURI := req.URL.EscapedPath()
+	if canonicalURI == "" {
+		canonicalURI = "/"
+	}
+
+	canonicalHeaders := fmt.Sprintf("host:%s\nx-amz-content-sha256:%s\nx-amz-date:%s\n", host, payloadHashHex, amzDate)
+	signedHeaders := "host;x-amz-content-sha256;x-amz-date"
+	canonicalRequest := fmt.Sprintf("%s\n%s\n\n%s\n%s\n%s", req.Method, canonicalURI, canonicalHeaders, signedHeaders, payloadHashHex)
+	canonicalRequestHash := sha256.Sum256([]byte(canonicalRequest))
+	credentialScope := fmt.Sprintf("%s/%s/s3/aws4_request", dateStamp, Region)
+	stringToSign := fmt.Sprintf("AWS4-HMAC-SHA256\n%s\n%s\n%s", amzDate, credentialScope, hex.EncodeToString(canonicalRequestHash[:]))
+	signingKey := getSignatureKey(c.secretKey, dateStamp, Region, "s3")
+	signature := hex.EncodeToString(hmacSHA256(signingKey, stringToSign))
+	authorization := fmt.Sprintf(
+		"AWS4-HMAC-SHA256 Credential=%s/%s, SignedHeaders=%s, Signature=%s",
+		c.accessKey,
+		credentialScope,
+		signedHeaders,
+		signature,
+	)
+
+	req.Header.Set("Authorization", authorization)
+	return nil
+}
+
+func hmacSHA256(key []byte, data string) []byte {
+	h := hmac.New(sha256.New, key)
+	_, _ = h.Write([]byte(data))
+	return h.Sum(nil)
+}
+
+func getSignatureKey(secretKey, dateStamp, region, service string) []byte {
+	kDate := hmacSHA256([]byte("AWS4"+secretKey), dateStamp)
+	kRegion := hmacSHA256(kDate, region)
+	kService := hmacSHA256(kRegion, service)
+	return hmacSHA256(kService, "aws4_request")
 }
 
 func (c *Client) logSignatureDebug(operation string, req *http.Request, payloadHash, canonicalRequest, stringToSign string) {
