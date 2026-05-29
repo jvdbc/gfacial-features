@@ -4,25 +4,38 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
-	"github.com/jvdbc/gfacial-features/internal/api"
 	"github.com/jvdbc/gfacial-features/internal/handler"
+	"github.com/jvdbc/gfacial-features/internal/openapi"
+	"github.com/jvdbc/gfacial-features/internal/s3"
 )
 
 func main() {
-	apiKey := os.Getenv("SCW_SECRET_KEY")
-	if apiKey == "" {
+	accessKey := os.Getenv("SCW_ACCESS_KEY")
+	if accessKey == "" {
+		log.Fatal("Error: env var SCW_ACCESS_KEY is not set")
+	}
+
+	secretKey := os.Getenv("SCW_SECRET_KEY")
+	if secretKey == "" {
 		log.Fatal("Error: env var SCW_SECRET_KEY is not set")
 	}
 
-	client, err := api.NewClient(apiKey)
-	if err != nil {
-		log.Fatalf("Failed to create client: %v", err)
+	oapiCli := openapi.NewClient(secretKey)
+
+	debug := false
+	debugMode := os.Getenv("GFACIAL_SCALEWAY_DEBUG")
+	if strings.ToLower(strings.TrimSpace(debugMode)) == "1" || strings.ToLower(strings.TrimSpace(debugMode)) == "true" {
+		log.Println("Debug mode enabled for Scaleway client")
+		debug = true
 	}
+
+	s3Cli := s3.NewClient(accessKey, secretKey, debug)
 
 	mux := http.NewServeMux()
 	mux.Handle("/", http.FileServer(http.Dir("front")))
-	mux.HandleFunc("/upload-face", handler.NewUploadFaceHandler(client))
+	mux.HandleFunc("/upload-face", handler.NewUploadFaceHandler(oapiCli, s3Cli))
 
 	port := ":8080"
 	log.Printf("Server starting on http://localhost%s", port)

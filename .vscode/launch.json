@@ -13,12 +13,13 @@
             "program": "${fileDirname}"
         },
         {
-            "name": "Launch gfacial features",
+            "name": "Launch gfacial Scaleway",
             "type": "go",
             "request": "launch",
             "mode": "auto",
-            "program": "${workspaceFolder}/cmd/gfacial-features",
+            "program": "${workspaceFolder}/cmd/gfacial-scaleway",
             "env": {
+                "GFACIAL_SCALEWAY_DEBUG": "true"
              },
             "args": [
             ]

@@ -30,7 +30,7 @@ Utilise le framework [scaleway-sdk-go](https://github.com/scaleway/scaleway-sdk-
   - Gender
   - Accessories (glasses, piercings)
 
-- **Storage**: Scaleway Object Storage (S3) - stocke les images uploadées
+- **Storage**: Scaleway Object Storage (S3) - stocke les images uploadées dans le bucket gfacial-images
 
 ## Docker
 

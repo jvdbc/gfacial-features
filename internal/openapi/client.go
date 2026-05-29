@@ -1,4 +1,4 @@
-package api
+package openapi
 
 import (
 	"context"
@@ -19,17 +19,13 @@ type Client struct {
 	client openai.Client
 }
 
-func NewClient(apiKey string) (*Client, error) {
-	if apiKey == "" {
-		return nil, fmt.Errorf("API key is required")
-	}
-
+func NewClient(apiKey string) *Client {
 	client := openai.NewClient(
 		option.WithBaseURL(BaseURL),
 		option.WithAPIKey(apiKey),
 	)
 
-	return &Client{client: client}, nil
+	return &Client{client: client}
 }
 
 func (c *Client) AnalyzeFace(ctx context.Context, imagePath string) (string, error) {

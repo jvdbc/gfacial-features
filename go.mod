@@ -15,6 +15,7 @@ require (
 )
 
 require (
+	github.com/aws/smithy-go/aws-http-auth v1.1.3
 	github.com/invopop/jsonschema v0.13.0
-	github.com/openai/openai-go/v3 v3.18.0
+	github.com/openai/openai-go/v3 v3.37.0
 )
