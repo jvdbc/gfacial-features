@@ -1,4 +1,4 @@
-package api
+package openapi
 
 import (
 	"github.com/invopop/jsonschema"
